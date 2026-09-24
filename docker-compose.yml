@@ -1,0 +1,28 @@
+# backend talks to evil's real MCP server and tern-llm's real /ask over the
+# network (Tailscale in production) -- neither is a service here, same
+# reasoning as tern-llm's own docker-compose.yml not bundling Ollama.
+#
+# frontend's VITE_API_BASE_URL is a BUILD-time value (see frontend/Dockerfile's
+# comment): to point it at a different backend, rebuild
+# (`docker compose build frontend`), don't expect the env var alone to do it
+# after the image already exists.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      EVIL_MCP_URL: ${EVIL_MCP_URL:-http://127.0.0.1:8765/mcp}
+      TERN_LLM_URL: ${TERN_LLM_URL:-http://127.0.0.1:8000}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - backend
+    restart: unless-stopped

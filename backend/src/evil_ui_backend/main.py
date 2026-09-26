@@ -52,13 +52,13 @@ def create_app(
     )
 
     async def _call_tool(name: str, arguments: dict) -> object:
+        """Catches Exception broadly on purpose: a connection failure (evil
+        unreachable) and a tool-level error (RuntimeError from mcp_client.py)
+        are both "the browsing UI couldn't get this data," not a 500 crash."""
         client = MCPToolClient(app.state.mcp_url)
         try:
             return await asyncio.to_thread(client.invoke, name, arguments)
         except Exception as exc:
-            # Broad on purpose: a connection failure (evil unreachable) and
-            # a tool-level error (RuntimeError from mcp_client.py) are both
-            # "the browsing UI couldn't get this data," not a 500 crash.
             raise HTTPException(status_code=502, detail=f"evil unreachable or tool error: {exc}") from exc
 
     @app.get("/healthz")

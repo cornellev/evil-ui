@@ -68,3 +68,43 @@ def test_single_item_list_stays_a_list_not_a_bare_dict(list_tools_mcp_url):
 def test_multi_item_list_does_not_drop_items(list_tools_mcp_url):
     client = MCPToolClient(list_tools_mcp_url)
     assert client.invoke("many_items", {}) == [{"a": 1}, {"a": 2}, {"a": 3}]
+
+
+@pytest.fixture
+def unannotated_list_tool_mcp_url():
+    """A tool with NO return type annotation -- list_tools_mcp_url's tools
+    are all annotated, so structured_content is always populated and the
+    fallback branch in mcp_client.py (content_texts, not structured) never
+    actually runs in those tests. An MCP server can't build an output
+    schema without a return annotation, so this reliably forces
+    structured_content to be absent, exercising that fallback directly."""
+    port = _free_port()
+    server = MCPServer("unannotated-list-test")
+
+    @server.tool()
+    async def many_items_no_annotation():
+        return [{"a": 1}, {"a": 2}, {"a": 3}]
+
+    thread = threading.Thread(
+        target=lambda: server.run(transport="streamable-http", host="127.0.0.1", port=port),
+        daemon=True,
+    )
+    thread.start()
+    for _ in range(50):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                break
+        except OSError:
+            time.sleep(0.1)
+
+    yield f"http://127.0.0.1:{port}/mcp"
+
+
+def test_multi_item_list_reconstructed_even_without_structured_content(unannotated_list_tool_mcp_url):
+    """Regression test for a gap the structured_content fix didn't actually
+    close: when structured_content is unavailable for any reason (here, a
+    tool with no return annotation), the old fallback (content[0].text
+    alone) silently dropped every item but the first. mcp_client.py now
+    reconstructs the full list from every content block instead."""
+    client = MCPToolClient(unannotated_list_tool_mcp_url)
+    assert client.invoke("many_items_no_annotation", {}) == [{"a": 1}, {"a": 2}, {"a": 3}]

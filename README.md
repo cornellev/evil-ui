@@ -91,27 +91,42 @@ backend + this frontend) were run for real and browser-verified, see below.
 ## Running tests
 
 ```bash
-cd backend && .venv/bin/python -m pytest        # unit + integration, self-contained
+cd backend && .venv/bin/python -m pytest        # unit + integration + browser e2e, self-contained
 cd frontend && bun run build                     # type-checks + builds
 ```
 
-The frontend was manually verified in a real headless browser (system
-Chromium via Playwright, not a mock) against the real backend, a real evil
-MCP server, and a real evil upload server, twice: once against seeded data
-(runs list rendered `run-1`, detail tabs showed `Turn 3`), and again for the
-upload flow specifically -- uploaded a real synthetic rosbag `.db3` through
-the browser's Upload page, through this backend's proxy, into evil's real
-`upload_server.py` and `ingest_recording()`, and confirmed the resulting
-run (`upload-demo`, 4 rows) appeared in the runs list and its detail page
-without a page reload. Zero console/page errors both times. Both
-verifications were one-off manual runs in this session (screenshots/scripts
-weren't kept, they're not part of the app); neither is an automated
-Playwright test in CI.
+`backend/tests/test_frontend_e2e.py` is a real headless-browser test (Playwright,
+system Chromium -- see `conftest.py`'s `chromium_launch_kwargs()` for why), not a
+manual one-off: it starts the real backend and a real `vite` dev server for the
+frontend, both pointed at the same dummy MCP/tern-llm/upload fixtures the rest of
+this repo's tests already use, and drives an actual browser against them. Covers
+the same two flows the earlier manual verification did (runs list -> turn detail,
+and the upload flow), now asserting on zero console/page errors automatically
+instead of being eyeballed once and not kept.
+
+Building this test surfaced two real bugs, both fixed:
+- The `dummy_mcp_url` fixture's `list_turns`/`list_laps`/`list_straights` stubs
+  were missing fields the frontend actually renders (`start_ts`, `entry_speed`,
+  etc.) -- fine for the existing backend-only tests (which only check a couple of
+  keys), but a real browser rendering the missing fields hits `undefined.toFixed()`
+  and crashes. A pure-JSON-passthrough test would never have caught this.
+- `mcp_client.py`'s fallback path (used when `structured_content` is unavailable,
+  e.g. a tool with no return-type annotation) still silently dropped every item
+  but the first from any list-returning tool with more than one item -- the
+  original `structured_content` fix only covered the *common* case, not this one.
+  Fixed in both this repo's and tern-llm's copy; see `test_mcp_client.py`'s
+  `test_multi_item_list_reconstructed_even_without_structured_content`.
+
+Also worth knowing: `get_by_text()` matches case-insensitive substrings by
+default, and `ChatPanel`'s always-visible hint text ("...how was I in turn 3
+during run-1?") contains both "run-1" and "turn 3" as literal substrings --
+an unscoped locator silently matches that decoy text instead of the real
+table cell. Locators in `test_frontend_e2e.py` are scoped to `<table>` or use
+`exact=True` for exactly this reason.
 
 ## Not yet built
 
 - Pagination controls in the UI itself -- the backend endpoints accept
   `limit`/`offset`, the frontend always requests the default page.
-- Any automated browser test (the Playwright checks above were manual, one-off).
 - Deploying anywhere for real, including pointing this at `cev-nuc` and a
   real tern-llm host over Tailscale -- verified here against localhost only.

@@ -14,6 +14,7 @@ services:
     environment:
       EVIL_MCP_URL: ${EVIL_MCP_URL:-http://127.0.0.1:8765/mcp}
       TERN_LLM_URL: ${TERN_LLM_URL:-http://127.0.0.1:8000}
+      EVIL_UPLOAD_URL: ${EVIL_UPLOAD_URL:-http://127.0.0.1:8766}
     restart: unless-stopped
 
   frontend:

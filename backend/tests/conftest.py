@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 import uvicorn
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from mcp.server.mcpserver import MCPServer
 
 from evil_ui_backend.main import create_app
@@ -168,6 +168,52 @@ def fake_evil_upload_url() -> Iterator[str]:
             "rows_ingested": 1,
             "classifiers_advanced_to_seq": {"turns": 1, "laps": 1, "straights": 1},
         }
+
+    recordings: list[dict] = []
+
+    @app.post("/recordings", status_code=201)
+    async def create_recording(request: Request) -> dict:
+        """Mirrors evil's POST /recordings response shape (catalog.py /
+        upload_server.py). Reads the whole multipart body via Starlette so the
+        proxy test proves the bytes arrive intact."""
+        form = await request.form()
+        parts = [p for p in form.getlist("files") if hasattr(p, "file")]
+        sizes = [len(await p.read()) for p in parts]
+        rec = {
+            "recording_id": f"rec-{len(recordings) + 1}",
+            "deduplicated": False,
+            "files": len(parts),
+            "total_bytes": sum(sizes),
+            "parse_status": "pending",
+            "names": [p.filename for p in parts],
+            "label": form.get("label"),
+            "category": form.get("category"),
+            "uploaded_at": 1_700_000_000.0 + len(recordings),
+            "container": "unknown",
+            "car": form.get("car"),
+            "event": form.get("event"),
+        }
+        recordings.append(rec)
+        return rec
+
+    @app.get("/recordings")
+    async def list_recordings(category: str | None = None) -> list[dict]:
+        return [r for r in recordings if category is None or r["category"] == category]
+
+    @app.get("/recordings/{recording_id}")
+    async def get_recording(recording_id: str) -> dict:
+        for r in recordings:
+            if r["recording_id"] == recording_id:
+                return r
+        raise HTTPException(status_code=404, detail="recording not found")
+
+    @app.patch("/recordings/{recording_id}")
+    async def patch_recording(recording_id: str, changes: dict) -> dict:
+        for r in recordings:
+            if r["recording_id"] == recording_id:
+                r.update(changes)
+                return r
+        raise HTTPException(status_code=404, detail="recording not found")
 
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)

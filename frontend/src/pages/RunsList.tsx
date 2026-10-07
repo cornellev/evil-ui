@@ -41,6 +41,9 @@ export default function RunsList() {
               <TableCell align="right">Samples</TableCell>
               <TableCell align="right">Start</TableCell>
               <TableCell align="right">End</TableCell>
+              <TableCell align="right">Distance (km)</TableCell>
+              <TableCell align="right">Energy (Wh)</TableCell>
+              <TableCell align="right">Efficiency (mi/kWh)</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -55,11 +58,14 @@ export default function RunsList() {
                 <TableCell align="right">{run.sample_count}</TableCell>
                 <TableCell align="right">{run.start_ts.toFixed(1)}s</TableCell>
                 <TableCell align="right">{run.end_ts.toFixed(1)}s</TableCell>
+                <TableCell align="right">{run.distance_m == null ? "-" : (run.distance_m / 1000).toFixed(2)}</TableCell>
+                <TableCell align="right">{run.energy_wh == null ? "-" : run.energy_wh.toFixed(1)}</TableCell>
+                <TableCell align="right">{run.efficiency_mi_per_kwh == null ? "-" : run.efficiency_mi_per_kwh.toFixed(1)}</TableCell>
               </TableRow>
             ))}
             {runs.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4}>
+                <TableCell colSpan={7}>
                   <Typography color="text.secondary">No runs yet.</Typography>
                 </TableCell>
               </TableRow>

@@ -51,7 +51,8 @@ def dummy_mcp_url() -> Iterator[str]:
 
     @server.tool(name="list_runs")
     async def list_runs() -> list[dict]:
-        return [{"run_id": "run-1", "sample_count": 10, "start_ts": 0.0, "end_ts": 10.0}]
+        return [{"run_id": "run-1", "sample_count": 10, "start_ts": 0.0, "end_ts": 10.0,
+                 "distance_m": 14346.0, "energy_wh": 300.3, "efficiency_mi_per_kwh": 29.7}]
 
     @server.tool(name="list_turns")
     async def list_turns(run_id: str, limit: int = 50, offset: int = 0) -> dict:
@@ -67,10 +68,16 @@ def dummy_mcp_url() -> Iterator[str]:
                     "turn_id": 1,
                     "run_id": run_id,
                     "turn_name": "Turn 3",
+                    "name": "Turn 3",
                     "start_ts": 40.0,
                     "end_ts": 42.0,
                     "entry_speed": 9.0,
                     "exit_speed": 9.5,
+                    "avg_speed": 9.25,
+                    "duration_s": 2.0,
+                    "distance_m": 18.5,
+                    "energy_wh": 0.4,
+                    "efficiency_mi_per_kwh": 28.7,
                 }
             ],
         }
@@ -89,6 +96,9 @@ def dummy_mcp_url() -> Iterator[str]:
                     "turn_count": 3,
                     "energy_wh": 120.5,
                     "avg_speed": 8.2,
+                    "duration_s": 60.0,
+                    "distance_m": 3787.0,
+                    "efficiency_mi_per_kwh": 31.2,
                 }
             ],
         }
@@ -101,6 +111,10 @@ def dummy_mcp_url() -> Iterator[str]:
                 {
                     "straight_id": 1,
                     "run_id": run_id,
+                    "name": "Straight 6-7",
+                    "duration_s": 10.0,
+                    "distance_m": 664.0,
+                    "efficiency_mi_per_kwh": 27.5,
                     "start_ts": 10.0,
                     "end_ts": 20.0,
                     "entry_speed": 8.0,

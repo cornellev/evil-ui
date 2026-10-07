@@ -39,6 +39,8 @@ def test_runs_list_and_detail_render_real_data(running_frontend_url: str) -> Non
 
             detail_table = page.locator("table")
             detail_table.get_by_text("Turn 3", exact=True).wait_for(timeout=10_000)
+            detail_table.get_by_text("Efficiency (mi/kWh)").wait_for(timeout=10_000)
+            detail_table.get_by_text("28.7", exact=True).wait_for(timeout=10_000)
 
             page.get_by_role("tab", name="Laps").click()
             detail_table.get_by_text("120.50", exact=True).wait_for(timeout=10_000)  # this lap's energy_wh

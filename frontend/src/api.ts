@@ -5,16 +5,25 @@ export interface RunSummary {
   sample_count: number;
   start_ts: number;
   end_ts: number;
+  distance_m: number | null;
+  energy_wh: number | null;
+  efficiency_mi_per_kwh: number | null;
 }
 
 export interface Turn {
   turn_id: number;
   run_id: string;
   turn_name: string;
+  name: string;
   start_ts: number;
   end_ts: number;
   entry_speed: number | null;
   exit_speed: number | null;
+  avg_speed: number | null;
+  duration_s: number | null;
+  distance_m: number | null;
+  energy_wh: number | null;
+  efficiency_mi_per_kwh: number | null;
 }
 
 export interface Lap {
@@ -24,19 +33,26 @@ export interface Lap {
   start_ts: number;
   end_ts: number;
   turn_count: number;
-  energy_wh: number | null;
   avg_speed: number | null;
+  duration_s: number | null;
+  distance_m: number | null;
+  energy_wh: number | null;
+  efficiency_mi_per_kwh: number | null;
 }
 
 export interface Straight {
   straight_id: number;
   run_id: string;
+  name: string;
   start_ts: number;
   end_ts: number;
   entry_speed: number | null;
   exit_speed: number | null;
   avg_speed: number | null;
+  duration_s: number | null;
+  distance_m: number | null;
   energy_wh: number | null;
+  efficiency_mi_per_kwh: number | null;
 }
 
 interface TurnsPage {

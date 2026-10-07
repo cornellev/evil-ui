@@ -50,3 +50,25 @@ def test_recordings_return_502_when_evil_upload_service_is_unreachable(dummy_mcp
     assert client.get("/recordings").status_code == 502
     posted = client.post("/recordings", files=[("files", ("a.csv", b"x", "text/csv"))])
     assert posted.status_code == 502
+
+
+def test_status_reparse_and_locations_pass_through(dummy_mcp_url, fake_tern_llm_url, fake_evil_upload_url):
+    client = _client(dummy_mcp_url, fake_tern_llm_url, fake_evil_upload_url)
+    created = client.post("/recordings", files=[("files", ("a.csv", b"x", "text/csv"))]).json()
+
+    status = client.get("/system/status")
+    assert status.status_code == 200
+    assert status.json()["jobs"]["counts"]["running"] == 1 and status.json()["system"]["cpu_count"] == 8
+
+    queued = client.post(f"/recordings/{created['recording_id']}/reparse")
+    assert queued.status_code == 202 and queued.json()["status"] == "queued"
+    assert client.post("/recordings/missing/reparse").status_code == 404
+
+    assert client.get("/locations").json()[0]["name"] == "B-lot"
+    added = client.post("/locations", json={"name": "IMS", "lat": 39.79, "lon": -86.23, "radius_m": 900})
+    assert added.status_code == 201 and added.json()["name"] == "IMS"
+
+
+def test_status_is_502_when_evil_is_down(dummy_mcp_url, fake_tern_llm_url):
+    client = _client(dummy_mcp_url, fake_tern_llm_url, "http://127.0.0.1:1")
+    assert client.get("/system/status").status_code == 502

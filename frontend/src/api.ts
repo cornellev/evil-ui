@@ -103,6 +103,10 @@ export const CATEGORIES: Category[] = ["competition", "testing", "bench", "sim",
 
 export interface RecordingSummary {
   recording_id: string;
+  run_id: string | null;
+  rows_ingested: number | null;
+  rows_duplicate: number | null;
+  rows_rejected: number | null;
   label: string | null;
   notes: string | null;
   category: Category | null;
@@ -184,6 +188,57 @@ export function uploadRecordings(
     xhr.send(form);
   });
   return { promise, abort: () => xhr.abort() };
+}
+
+export interface JobRow {
+  job_id: number;
+  recording_id: string;
+  kind: "scan" | "parse" | "cache_build" | "repair";
+  lane: "fast" | "deep";
+  status: "pending" | "running" | "done" | "failed";
+  attempts: number;
+  max_attempts: number;
+  progress: number | null;
+  error: string | null;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  name: string;
+  size_bytes: number | null;
+}
+
+export interface SystemStatus {
+  jobs: {
+    counts: Record<"pending" | "running" | "done" | "failed", number>;
+    oldest_pending_age_sec: number | null;
+    queue: JobRow[];
+  };
+  system: {
+    cpu_count: number | null;
+    load_avg: (number | null)[];
+    mem_total_bytes: number | null;
+    mem_available_bytes: number | null;
+    disk: { total_bytes: number | null; free_bytes: number | null };
+    recordings_bytes: number;
+  };
+  time: number;
+}
+
+export async function getSystemStatus(): Promise<SystemStatus> {
+  const response = await fetch(`${API_BASE_URL}/system/status`);
+  if (!response.ok) {
+    throw new Error(`status failed: ${response.status} ${await response.text()}`);
+  }
+  return response.json() as Promise<SystemStatus>;
+}
+
+export async function reparseRecording(recordingId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/recordings/${encodeURIComponent(recordingId)}/reparse`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(`reparse failed: ${response.status} ${await response.text()}`);
+  }
 }
 
 export async function listRecordings(params: { category?: string; limit?: number } = {}): Promise<RecordingSummary[]> {

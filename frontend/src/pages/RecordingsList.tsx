@@ -11,8 +11,11 @@ import {
   CircularProgress,
   Alert,
   Chip,
+  Button,
+  Tooltip,
 } from "@mui/material";
-import { listRecordings, type RecordingSummary } from "../api";
+import { Link as RouterLink } from "react-router-dom";
+import { listRecordings, reparseRecording, type RecordingSummary } from "../api";
 
 function formatBytes(n: number | null): string {
   if (n === null) return "";
@@ -34,10 +37,27 @@ export default function RecordingsList() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listRecordings({ limit: 200 })
-      .then(setRecordings)
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    let cancelled = false;
+    const load = () =>
+      listRecordings({ limit: 200 })
+        .then((rows) => !cancelled && setRecordings(rows))
+        .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)));
+    load();
+    const timer = setInterval(load, 5000); // statuses move as the worker progresses
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
+
+  async function handleReparse(id: string) {
+    try {
+      await reparseRecording(id);
+      setRecordings(await listRecordings({ limit: 200 }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   if (error) return <Alert severity="error">{error}</Alert>;
   if (recordings === null) return <CircularProgress />;
@@ -58,6 +78,9 @@ export default function RecordingsList() {
               <TableCell>Format</TableCell>
               <TableCell align="right">Size</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell>Run</TableCell>
+              <TableCell align="right">Rows</TableCell>
+              <TableCell />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -70,13 +93,30 @@ export default function RecordingsList() {
                 <TableCell>{r.container}</TableCell>
                 <TableCell align="right">{formatBytes(r.total_bytes)}</TableCell>
                 <TableCell>
-                  <Chip size="small" label={r.parse_status} color={STATUS_COLOR[r.parse_status]} />
+                  <Tooltip title={r.parse_error ?? ""} disableHoverListener={!r.parse_error}>
+                    <Chip size="small" label={r.parse_status} color={STATUS_COLOR[r.parse_status]} />
+                  </Tooltip>
+                </TableCell>
+                <TableCell>
+                  {r.run_id && r.parse_status === "parsed" ? (
+                    <RouterLink to={`/runs/${encodeURIComponent(r.run_id)}`}>{r.run_id}</RouterLink>
+                  ) : (
+                    ""
+                  )}
+                </TableCell>
+                <TableCell align="right">
+                  {r.rows_ingested !== null ? `${r.rows_ingested}${r.rows_duplicate ? ` (+${r.rows_duplicate} repeats dropped)` : ""}` : ""}
+                </TableCell>
+                <TableCell>
+                  <Button size="small" onClick={() => handleReparse(r.recording_id)}>
+                    Reparse
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
             {recordings.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={10}>
                   <Typography color="text.secondary">No recordings yet.</Typography>
                 </TableCell>
               </TableRow>

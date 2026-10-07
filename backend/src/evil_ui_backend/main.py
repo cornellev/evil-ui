@@ -148,6 +148,22 @@ def create_app(
     async def patch_recording_proxy(recording_id: str, request: Request) -> Response:
         return await _forward_json("PATCH", f"/recordings/{recording_id}", request)
 
+    @app.post("/recordings/{recording_id}/reparse")
+    async def reparse_recording_proxy(recording_id: str, request: Request) -> Response:
+        return await _forward_json("POST", f"/recordings/{recording_id}/reparse", request)
+
+    @app.get("/system/status")
+    async def system_status_proxy(request: Request) -> Response:
+        return await _forward_json("GET", "/system/status", request)
+
+    @app.get("/locations")
+    async def list_locations_proxy(request: Request) -> Response:
+        return await _forward_json("GET", "/locations", request)
+
+    @app.post("/locations")
+    async def add_location_proxy(request: Request) -> Response:
+        return await _forward_json("POST", "/locations", request)
+
     @app.post("/recordings")
     async def create_recording_proxy(request: Request) -> Response:
         """Streams the multipart body straight through to evil without parsing

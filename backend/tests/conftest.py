@@ -215,6 +215,44 @@ def fake_evil_upload_url() -> Iterator[str]:
                 return r
         raise HTTPException(status_code=404, detail="recording not found")
 
+    @app.post("/recordings/{recording_id}/reparse", status_code=202)
+    async def reparse(recording_id: str) -> dict:
+        for r in recordings:
+            if r["recording_id"] == recording_id:
+                r["parse_status"] = "pending"
+                return {"recording_id": recording_id, "job_id": 7, "status": "queued"}
+        raise HTTPException(status_code=404, detail="recording not found")
+
+    @app.get("/system/status")
+    async def system_status() -> dict:
+        """Same shape as evil's catalog.system_status()."""
+        return {
+            "jobs": {
+                "counts": {"pending": 1, "running": 1, "done": 3, "failed": 0},
+                "oldest_pending_age_sec": 4.0,
+                "queue": [
+                    {"job_id": 2, "recording_id": "rec-1", "kind": "parse", "lane": "deep", "status": "running",
+                     "attempts": 1, "max_attempts": 2, "progress": 0.5, "error": None, "created_at": 1.0,
+                     "started_at": 2.0, "finished_at": None, "name": "big bag", "size_bytes": 411_000_000},
+                    {"job_id": 3, "recording_id": "rec-2", "kind": "parse", "lane": "deep", "status": "pending",
+                     "attempts": 0, "max_attempts": 2, "progress": None, "error": None, "created_at": 3.0,
+                     "started_at": None, "finished_at": None, "name": "small bag", "size_bytes": 1000},
+                ],
+            },
+            "system": {"cpu_count": 8, "load_avg": [0.5, 0.4, 0.3], "mem_total_bytes": 16 * 1024**3,
+                       "mem_available_bytes": 8 * 1024**3, "disk": {"total_bytes": 10**12, "free_bytes": 5 * 10**11},
+                       "recordings_bytes": 10**9},
+            "time": 100.0,
+        }
+
+    @app.get("/locations")
+    async def locations() -> list[dict]:
+        return [{"location_id": 1, "name": "B-lot", "center_lat": 42.0, "center_lon": -76.0, "radius_m": 100.0}]
+
+    @app.post("/locations", status_code=201)
+    async def add_location(body: dict) -> dict:
+        return {"location_id": 2, "name": body["name"]}
+
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)

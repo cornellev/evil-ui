@@ -57,6 +57,11 @@ def test_upload_flow_reaches_the_real_proxy_chain(running_frontend_url: str) -> 
             page.on("pageerror", lambda exc: errors.append(str(exc)))
 
             page.goto(f"{running_frontend_url}/upload")
+            panel = page.get_by_test_id("status-panel")
+            panel.get_by_text("Processing queue").wait_for(timeout=10_000)
+            panel.get_by_text("big bag", exact=True).wait_for(timeout=10_000)   # a job from the fake queue
+            panel.get_by_text("1 running").wait_for(timeout=10_000)
+            panel.get_by_text("CPU load 0.50 (1 min) on 8 cores").wait_for(timeout=10_000)
             page.get_by_label("Label").fill("garage test")
 
             with page.expect_file_chooser() as chooser_info:

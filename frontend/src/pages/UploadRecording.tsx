@@ -20,6 +20,7 @@ import {
   type RecordingUploadResult,
   type UploadItem,
 } from "../api";
+import StatusPanel from "../components/StatusPanel";
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -86,8 +87,8 @@ export default function UploadRecording() {
           <Typography variant="body2" color="text.secondary">
             Upload any recording: a rosbag2 folder (<code>.db3</code> + <code>metadata.yaml</code>), a CSV
             export, or anything else. Files are stored as-is, even if they cannot be read. Keep this tab
-            open until the upload finishes; an interrupted upload stores nothing. Reading the data into
-            EVIL's tables happens later.
+            open until the upload finishes; an interrupted upload stores nothing. The recording is then read into
+            EVIL's tables in the background (see the queue below).
           </Typography>
 
           <Stack direction="row" spacing={1}>
@@ -194,6 +195,7 @@ export default function UploadRecording() {
           )}
         </Stack>
       </Paper>
+      <StatusPanel />
     </>
   );
 }

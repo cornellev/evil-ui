@@ -206,6 +206,8 @@ def fake_evil_upload_url() -> Iterator[str]:
             "container": "unknown",
             "car": form.get("car"),
             "event": form.get("event"),
+            "notes": None, "category_method": "manual" if form.get("category") else None,
+            "location_id": None, "location_method": None,
         }
         recordings.append(rec)
         return rec
@@ -226,6 +228,10 @@ def fake_evil_upload_url() -> Iterator[str]:
         for r in recordings:
             if r["recording_id"] == recording_id:
                 r.update(changes)
+                if "category" in changes:      # same locking rule as evil's update_recording
+                    r["category_method"] = "manual" if changes["category"] else None
+                if "location_id" in changes:
+                    r["location_method"] = "manual" if changes["location_id"] is not None else None
                 return r
         raise HTTPException(status_code=404, detail="recording not found")
 
@@ -261,7 +267,8 @@ def fake_evil_upload_url() -> Iterator[str]:
 
     @app.get("/locations")
     async def locations() -> list[dict]:
-        return [{"location_id": 1, "name": "B-lot", "center_lat": 42.0, "center_lon": -76.0, "radius_m": 100.0}]
+        return [{"location_id": 1, "name": "B-lot", "center_lat": 42.0, "center_lon": -76.0, "radius_m": 100.0,
+                 "default_category": "b_lot"}]
 
     @app.post("/locations", status_code=201)
     async def add_location(body: dict) -> dict:

@@ -17,7 +17,8 @@ def test_get_runs_calls_list_runs_over_real_mcp(dummy_mcp_url, fake_tern_llm_url
     resp = _client(dummy_mcp_url, fake_tern_llm_url).get("/runs")
 
     assert resp.status_code == 200
-    assert resp.json() == [{"run_id": "run-1", "sample_count": 10, "start_ts": 0.0, "end_ts": 10.0}]
+    assert resp.json() == [{"run_id": "run-1", "sample_count": 10, "start_ts": 0.0, "end_ts": 10.0,
+                            "distance_m": 14346.0, "energy_wh": 300.3, "efficiency_mi_per_kwh": 29.7}]
 
 
 def test_get_turns_passes_run_id_and_pagination(dummy_mcp_url, fake_tern_llm_url):

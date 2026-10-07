@@ -114,8 +114,8 @@ export async function uploadRecording(runId: string, file: File): Promise<Upload
   return response.json() as Promise<UploadResult>;
 }
 
-export type Category = "competition" | "testing" | "bench" | "sim" | "other";
-export const CATEGORIES: Category[] = ["competition", "testing", "bench", "sim", "other"];
+export type Category = "competition" | "testing" | "bench" | "sim" | "b_lot" | "other";
+export const CATEGORIES: Category[] = ["competition", "testing", "bench", "sim", "b_lot", "other"];
 
 export interface RecordingSummary {
   recording_id: string;
@@ -126,6 +126,9 @@ export interface RecordingSummary {
   label: string | null;
   notes: string | null;
   category: Category | null;
+  category_method: "manual" | "auto" | null;
+  location_id: number | null;
+  location_method: string | null;
   car: string | null;
   event: string | null;
   container: string;
@@ -268,6 +271,52 @@ export async function reparseRecording(recordingId: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`reparse failed: ${response.status} ${await response.text()}`);
   }
+}
+
+export interface NamedLocation {
+  location_id: number;
+  name: string;
+  center_lat: number;
+  center_lon: number;
+  radius_m: number;
+  default_category: Category | null;
+}
+
+export async function listLocations(): Promise<NamedLocation[]> {
+  const response = await fetch(`${API_BASE_URL}/locations`);
+  if (!response.ok) {
+    throw new Error(`locations failed: ${response.status} ${await response.text()}`);
+  }
+  return response.json() as Promise<NamedLocation[]>;
+}
+
+/** Edit a stored recording's human-entered fields. A category or location you set is locked as manual;
+ * send null to unlock it and let the GPS-based automatic label decide again. */
+export interface RecordingEdit {
+  label?: string | null;
+  notes?: string | null;
+  category?: Category | null;
+  car?: string | null;
+  event?: string | null;
+  location_id?: number | null;
+}
+
+export async function updateRecording(recordingId: string, changes: RecordingEdit): Promise<RecordingSummary> {
+  const response = await fetch(`${API_BASE_URL}/recordings/${encodeURIComponent(recordingId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(changes),
+  });
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      detail = JSON.parse(detail).detail ?? detail;
+    } catch {
+      /* keep raw text */
+    }
+    throw new Error(`update failed: ${response.status} ${detail}`);
+  }
+  return response.json() as Promise<RecordingSummary>;
 }
 
 export async function listRecordings(params: { category?: string; limit?: number } = {}): Promise<RecordingSummary[]> {

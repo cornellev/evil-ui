@@ -85,3 +85,41 @@ def test_upload_flow_reaches_the_real_proxy_chain(running_frontend_url: str) -> 
             assert errors == [], f"console/page errors during upload: {errors}"
         finally:
             browser.close()
+
+
+def test_a_recording_can_be_edited_from_the_recordings_page(running_frontend_url: str) -> None:
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, **chromium_launch_kwargs())
+        try:
+            page = browser.new_page()
+            errors: list[str] = []
+            page.on("pageerror", lambda exc: errors.append(str(exc)))
+
+            page.goto(f"{running_frontend_url}/upload")
+            page.get_by_label("Label").fill("before edit")
+            with page.expect_file_chooser() as chooser_info:
+                page.get_by_text("Choose files").click()
+            chooser_info.value.set_files(files=[{"name": "edit_me.csv", "mimeType": "text/csv", "buffer": b"seq,x\n1,2\n"}])
+            page.get_by_role("button", name="Upload", exact=True).click()
+            page.get_by_text("Stored 1 file", exact=False).wait_for(timeout=10_000)
+
+            page.get_by_role("link", name="View recordings").click()
+            row = page.locator("tr", has_text="before edit")
+            row.get_by_role("button", name="Edit").click()
+
+            dialog = page.get_by_role("dialog")
+            dialog.get_by_label("Label").fill("after edit")
+            dialog.get_by_label("Category").click()
+            page.get_by_role("option", name="b_lot").click()
+            dialog.get_by_label("Location").click()
+            page.get_by_role("option", name="B-lot").click()
+            dialog.get_by_role("button", name="Save").click()
+
+            edited = page.locator("tr", has_text="after edit")
+            edited.get_by_text("b_lot", exact=True).wait_for(timeout=10_000)
+            edited.get_by_text("B-lot", exact=True).wait_for(timeout=10_000)
+            assert edited.get_by_text("auto", exact=True).count() == 0        # a chosen category is not "auto"
+
+            assert errors == [], f"console/page errors while editing: {errors}"
+        finally:
+            browser.close()

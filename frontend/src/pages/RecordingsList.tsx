@@ -15,7 +15,8 @@ import {
   Tooltip,
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
-import { listRecordings, reparseRecording, type RecordingSummary } from "../api";
+import { listLocations, listRecordings, reparseRecording, type NamedLocation, type RecordingSummary } from "../api";
+import EditRecordingDialog from "../components/EditRecordingDialog";
 
 function formatBytes(n: number | null): string {
   if (n === null) return "";
@@ -35,6 +36,12 @@ const STATUS_COLOR: Record<RecordingSummary["parse_status"], "default" | "succes
 export default function RecordingsList() {
   const [recordings, setRecordings] = useState<RecordingSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [locations, setLocations] = useState<NamedLocation[]>([]);
+  const [editing, setEditing] = useState<RecordingSummary | null>(null);
+
+  useEffect(() => {
+    listLocations().then(setLocations).catch(() => setLocations([]));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +81,7 @@ export default function RecordingsList() {
               <TableCell>Uploaded</TableCell>
               <TableCell>Name</TableCell>
               <TableCell>Category</TableCell>
+              <TableCell>Location</TableCell>
               <TableCell>Car</TableCell>
               <TableCell>Format</TableCell>
               <TableCell align="right">Size</TableCell>
@@ -88,7 +96,13 @@ export default function RecordingsList() {
               <TableRow key={r.recording_id}>
                 <TableCell>{new Date(r.uploaded_at * 1000).toLocaleString()}</TableCell>
                 <TableCell>{r.label ?? r.original_name ?? r.recording_id}</TableCell>
-                <TableCell>{r.category ?? ""}</TableCell>
+                <TableCell>
+                  {r.category ?? ""}
+                  {r.category && r.category_method === "auto" && (
+                    <Chip size="small" variant="outlined" label="auto" sx={{ ml: 0.5 }} />
+                  )}
+                </TableCell>
+                <TableCell>{locations.find((l) => l.location_id === r.location_id)?.name ?? ""}</TableCell>
                 <TableCell>{r.car ?? ""}</TableCell>
                 <TableCell>{r.container}</TableCell>
                 <TableCell align="right">{formatBytes(r.total_bytes)}</TableCell>
@@ -107,7 +121,10 @@ export default function RecordingsList() {
                 <TableCell align="right">
                   {r.rows_ingested !== null ? `${r.rows_ingested}${r.rows_duplicate ? ` (+${r.rows_duplicate} repeats dropped)` : ""}` : ""}
                 </TableCell>
-                <TableCell>
+                <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  <Button size="small" onClick={() => setEditing(r)}>
+                    Edit
+                  </Button>
                   <Button size="small" onClick={() => handleReparse(r.recording_id)}>
                     Reparse
                   </Button>
@@ -116,7 +133,7 @@ export default function RecordingsList() {
             ))}
             {recordings.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10}>
+                <TableCell colSpan={11}>
                   <Typography color="text.secondary">No recordings yet.</Typography>
                 </TableCell>
               </TableRow>
@@ -124,6 +141,14 @@ export default function RecordingsList() {
           </TableBody>
         </Table>
       </TableContainer>
+      <EditRecordingDialog
+        recording={editing}
+        locations={locations}
+        onClose={() => setEditing(null)}
+        onSaved={(updated) =>
+          setRecordings((rows) => rows && rows.map((row) => (row.recording_id === updated.recording_id ? { ...row, ...updated } : row)))
+        }
+      />
     </>
   );
 }

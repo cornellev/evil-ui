@@ -13,6 +13,7 @@ import {
 import RunsList from "./pages/RunsList";
 import RunDetail from "./pages/RunDetail";
 import UploadRecording from "./pages/UploadRecording";
+import RecordingsList from "./pages/RecordingsList";
 import ChatPanel from "./components/ChatPanel";
 
 const darkTheme = createTheme({
@@ -35,6 +36,9 @@ export default function App() {
             <Button component={Link} to="/" color="inherit">
               Runs
             </Button>
+            <Button component={Link} to="/recordings" color="inherit">
+              Recordings
+            </Button>
             <Button component={Link} to="/upload" color="inherit">
               Upload
             </Button>
@@ -47,6 +51,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<RunsList />} />
                 <Route path="/runs/:runId" element={<RunDetail />} />
+                <Route path="/recordings" element={<RecordingsList />} />
                 <Route path="/upload" element={<UploadRecording />} />
               </Routes>
             </Grid>

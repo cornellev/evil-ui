@@ -57,16 +57,28 @@ def test_upload_flow_reaches_the_real_proxy_chain(running_frontend_url: str) -> 
             page.on("pageerror", lambda exc: errors.append(str(exc)))
 
             page.goto(f"{running_frontend_url}/upload")
-            page.get_by_label("Run ID").fill("upload-demo")
+            panel = page.get_by_test_id("status-panel")
+            panel.get_by_text("Processing queue").wait_for(timeout=10_000)
+            panel.get_by_text("big bag", exact=True).wait_for(timeout=10_000)   # a job from the fake queue
+            panel.get_by_text("1 running").wait_for(timeout=10_000)
+            panel.get_by_text("CPU load 0.50 (1 min) on 8 cores").wait_for(timeout=10_000)
+            page.get_by_label("Label").fill("garage test")
 
             with page.expect_file_chooser() as chooser_info:
-                page.get_by_text("Choose file").click()
+                page.get_by_text("Choose files").click()
             chooser_info.value.set_files(
-                files=[{"name": "recording.csv", "mimeType": "text/csv", "buffer": b"seq,x\n1,2\n"}]
+                files=[
+                    {"name": "recording.csv", "mimeType": "text/csv", "buffer": b"seq,x\n1,2\n"},
+                    {"name": "metadata.yaml", "mimeType": "text/yaml", "buffer": b"x: 1"},
+                ]
             )
 
-            page.get_by_role("button", name="Upload and ingest").click()
-            page.get_by_text("Ingested 1 row.", exact=True).wait_for(timeout=10_000)
+            page.get_by_role("button", name="Upload", exact=True).click()
+            page.get_by_text("Stored 2 files", exact=False).wait_for(timeout=10_000)
+
+            page.get_by_role("link", name="View recordings").click()
+            page.locator("table").get_by_text("garage test", exact=True).wait_for(timeout=10_000)
+            page.locator("table").get_by_text("pending", exact=True).wait_for(timeout=10_000)
 
             assert errors == [], f"console/page errors during upload: {errors}"
         finally:

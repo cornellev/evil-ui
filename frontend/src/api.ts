@@ -81,6 +81,8 @@ export interface UploadResult {
   classifiers_advanced_to_seq?: Record<string, number>;
 }
 
+/** Legacy single-file upload that parses straight into evil.db. Superseded by
+ * uploadRecordings(); kept until parsing moves behind the catalog. */
 export async function uploadRecording(runId: string, file: File): Promise<UploadResult> {
   const formData = new FormData();
   formData.append("run_id", runId);
@@ -94,6 +96,160 @@ export async function uploadRecording(runId: string, file: File): Promise<Upload
     throw new Error(`upload failed: ${response.status} ${await response.text()}`);
   }
   return response.json() as Promise<UploadResult>;
+}
+
+export type Category = "competition" | "testing" | "bench" | "sim" | "other";
+export const CATEGORIES: Category[] = ["competition", "testing", "bench", "sim", "other"];
+
+export interface RecordingSummary {
+  recording_id: string;
+  run_id: string | null;
+  rows_ingested: number | null;
+  rows_duplicate: number | null;
+  rows_rejected: number | null;
+  label: string | null;
+  notes: string | null;
+  category: Category | null;
+  car: string | null;
+  event: string | null;
+  container: string;
+  original_name: string | null;
+  uploaded_at: number;
+  total_bytes: number | null;
+  parse_status: "pending" | "running" | "parsed" | "skipped" | "failed";
+  parse_error: string | null;
+}
+
+export interface RecordingUploadResult {
+  recording_id: string;
+  deduplicated: boolean;
+  files: number;
+  total_bytes: number;
+  parse_status: string;
+}
+
+export interface RecordingMetadata {
+  category?: Category | "";
+  car?: string;
+  event?: string;
+  label?: string;
+  notes?: string;
+}
+
+/** A file plus the path it should be stored under (folder uploads keep their
+ * relative path; plain files use their own name). */
+export interface UploadItem {
+  file: File;
+  path: string;
+}
+
+export function itemsFromFileList(files: FileList | File[]): UploadItem[] {
+  return Array.from(files).map((file) => ({
+    file,
+    path: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
+  }));
+}
+
+/** Uploads one recording (one or more files) and resolves only when evil has
+ * stored and cataloged it. XMLHttpRequest rather than fetch for upload
+ * progress. Aborting (or closing the tab) stores nothing. */
+export function uploadRecordings(
+  items: UploadItem[],
+  metadata: RecordingMetadata,
+  onProgress?: (loaded: number, total: number) => void,
+): { promise: Promise<RecordingUploadResult>; abort: () => void } {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise<RecordingUploadResult>((resolve, reject) => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value) form.append(key, value);
+    }
+    for (const { file, path } of items) form.append("files", file, path);
+
+    xhr.open("POST", `${API_BASE_URL}/recordings`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded, e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status === 200 || xhr.status === 201) {
+        resolve(JSON.parse(xhr.responseText) as RecordingUploadResult);
+      } else {
+        let detail = xhr.responseText;
+        try {
+          detail = JSON.parse(xhr.responseText).detail ?? detail;
+        } catch {
+          /* keep raw text */
+        }
+        reject(new Error(`upload failed: ${xhr.status} ${detail}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("upload failed: network error"));
+    xhr.onabort = () => reject(new Error("upload cancelled"));
+    xhr.send(form);
+  });
+  return { promise, abort: () => xhr.abort() };
+}
+
+export interface JobRow {
+  job_id: number;
+  recording_id: string;
+  kind: "scan" | "parse" | "cache_build" | "repair";
+  lane: "fast" | "deep";
+  status: "pending" | "running" | "done" | "failed";
+  attempts: number;
+  max_attempts: number;
+  progress: number | null;
+  error: string | null;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  name: string;
+  size_bytes: number | null;
+}
+
+export interface SystemStatus {
+  jobs: {
+    counts: Record<"pending" | "running" | "done" | "failed", number>;
+    oldest_pending_age_sec: number | null;
+    queue: JobRow[];
+  };
+  system: {
+    cpu_count: number | null;
+    load_avg: (number | null)[];
+    mem_total_bytes: number | null;
+    mem_available_bytes: number | null;
+    disk: { total_bytes: number | null; free_bytes: number | null };
+    recordings_bytes: number;
+  };
+  time: number;
+}
+
+export async function getSystemStatus(): Promise<SystemStatus> {
+  const response = await fetch(`${API_BASE_URL}/system/status`);
+  if (!response.ok) {
+    throw new Error(`status failed: ${response.status} ${await response.text()}`);
+  }
+  return response.json() as Promise<SystemStatus>;
+}
+
+export async function reparseRecording(recordingId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/recordings/${encodeURIComponent(recordingId)}/reparse`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(`reparse failed: ${response.status} ${await response.text()}`);
+  }
+}
+
+export async function listRecordings(params: { category?: string; limit?: number } = {}): Promise<RecordingSummary[]> {
+  const query = new URLSearchParams();
+  if (params.category) query.set("category", params.category);
+  if (params.limit) query.set("limit", String(params.limit));
+  const response = await fetch(`${API_BASE_URL}/recordings?${query}`);
+  if (!response.ok) {
+    throw new Error(`recordings failed: ${response.status} ${await response.text()}`);
+  }
+  return response.json() as Promise<RecordingSummary[]>;
 }
 
 export async function askQuestion(question: string): Promise<string> {

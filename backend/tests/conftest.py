@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 import uvicorn
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from mcp.server.mcpserver import MCPServer
 
 from evil_ui_backend.main import create_app
@@ -168,6 +168,90 @@ def fake_evil_upload_url() -> Iterator[str]:
             "rows_ingested": 1,
             "classifiers_advanced_to_seq": {"turns": 1, "laps": 1, "straights": 1},
         }
+
+    recordings: list[dict] = []
+
+    @app.post("/recordings", status_code=201)
+    async def create_recording(request: Request) -> dict:
+        """Mirrors evil's POST /recordings response shape (catalog.py /
+        upload_server.py). Reads the whole multipart body via Starlette so the
+        proxy test proves the bytes arrive intact."""
+        form = await request.form()
+        parts = [p for p in form.getlist("files") if hasattr(p, "file")]
+        sizes = [len(await p.read()) for p in parts]
+        rec = {
+            "recording_id": f"rec-{len(recordings) + 1}",
+            "deduplicated": False,
+            "files": len(parts),
+            "total_bytes": sum(sizes),
+            "parse_status": "pending",
+            "names": [p.filename for p in parts],
+            "label": form.get("label"),
+            "category": form.get("category"),
+            "uploaded_at": 1_700_000_000.0 + len(recordings),
+            "container": "unknown",
+            "car": form.get("car"),
+            "event": form.get("event"),
+        }
+        recordings.append(rec)
+        return rec
+
+    @app.get("/recordings")
+    async def list_recordings(category: str | None = None) -> list[dict]:
+        return [r for r in recordings if category is None or r["category"] == category]
+
+    @app.get("/recordings/{recording_id}")
+    async def get_recording(recording_id: str) -> dict:
+        for r in recordings:
+            if r["recording_id"] == recording_id:
+                return r
+        raise HTTPException(status_code=404, detail="recording not found")
+
+    @app.patch("/recordings/{recording_id}")
+    async def patch_recording(recording_id: str, changes: dict) -> dict:
+        for r in recordings:
+            if r["recording_id"] == recording_id:
+                r.update(changes)
+                return r
+        raise HTTPException(status_code=404, detail="recording not found")
+
+    @app.post("/recordings/{recording_id}/reparse", status_code=202)
+    async def reparse(recording_id: str) -> dict:
+        for r in recordings:
+            if r["recording_id"] == recording_id:
+                r["parse_status"] = "pending"
+                return {"recording_id": recording_id, "job_id": 7, "status": "queued"}
+        raise HTTPException(status_code=404, detail="recording not found")
+
+    @app.get("/system/status")
+    async def system_status() -> dict:
+        """Same shape as evil's catalog.system_status()."""
+        return {
+            "jobs": {
+                "counts": {"pending": 1, "running": 1, "done": 3, "failed": 0},
+                "oldest_pending_age_sec": 4.0,
+                "queue": [
+                    {"job_id": 2, "recording_id": "rec-1", "kind": "parse", "lane": "deep", "status": "running",
+                     "attempts": 1, "max_attempts": 2, "progress": 0.5, "error": None, "created_at": 1.0,
+                     "started_at": 2.0, "finished_at": None, "name": "big bag", "size_bytes": 411_000_000},
+                    {"job_id": 3, "recording_id": "rec-2", "kind": "parse", "lane": "deep", "status": "pending",
+                     "attempts": 0, "max_attempts": 2, "progress": None, "error": None, "created_at": 3.0,
+                     "started_at": None, "finished_at": None, "name": "small bag", "size_bytes": 1000},
+                ],
+            },
+            "system": {"cpu_count": 8, "load_avg": [0.5, 0.4, 0.3], "mem_total_bytes": 16 * 1024**3,
+                       "mem_available_bytes": 8 * 1024**3, "disk": {"total_bytes": 10**12, "free_bytes": 5 * 10**11},
+                       "recordings_bytes": 10**9},
+            "time": 100.0,
+        }
+
+    @app.get("/locations")
+    async def locations() -> list[dict]:
+        return [{"location_id": 1, "name": "B-lot", "center_lat": 42.0, "center_lon": -76.0, "radius_m": 100.0}]
+
+    @app.post("/locations", status_code=201)
+    async def add_location(body: dict) -> dict:
+        return {"location_id": 2, "name": body["name"]}
 
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)

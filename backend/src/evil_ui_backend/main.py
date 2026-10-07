@@ -17,9 +17,10 @@ import asyncio
 import os
 
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.requests import ClientDisconnect
 
 from evil_ui_backend.mcp_client import MCPToolClient
 
@@ -28,6 +29,8 @@ DEFAULT_EVIL_UPLOAD_URL = os.getenv("EVIL_UPLOAD_URL", "http://127.0.0.1:8766")
 DEFAULT_TERN_LLM_URL = os.getenv("TERN_LLM_URL", "http://127.0.0.1:8000")
 ASK_PROXY_TIMEOUT_SEC = float(os.getenv("TERN_LLM_ASK_TIMEOUT_SEC", "160"))
 UPLOAD_PROXY_TIMEOUT_SEC = float(os.getenv("EVIL_UPLOAD_TIMEOUT_SEC", "120"))
+# Recording uploads can be GBs; the upstream replies only after storing everything.
+RECORDING_PROXY_TIMEOUT_SEC = float(os.getenv("EVIL_RECORDING_TIMEOUT_SEC", "1800"))
 
 
 class AskRequest(BaseModel):
@@ -113,6 +116,79 @@ def create_app(
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.json()
+
+    async def _forward_json(method: str, path: str, request: Request) -> Response:
+        """Plain request/response passthrough to evil's upload service
+        (catalog endpoints): status and body are returned untouched."""
+        timeout = httpx.Timeout(UPLOAD_PROXY_TIMEOUT_SEC, connect=5.0)
+        body = await request.body() if method in ("PATCH", "POST") else None
+        headers = {"content-type": request.headers["content-type"]} if body and "content-type" in request.headers else {}
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                upstream = await client.request(
+                    method, f"{app.state.upload_url}{path}", params=request.query_params, content=body, headers=headers
+                )
+            except httpx.TransportError as exc:
+                raise HTTPException(status_code=502, detail="evil upload service unreachable") from exc
+        return Response(
+            content=upstream.content,
+            status_code=upstream.status_code,
+            media_type=upstream.headers.get("content-type", "application/json"),
+        )
+
+    @app.get("/recordings")
+    async def list_recordings_proxy(request: Request) -> Response:
+        return await _forward_json("GET", "/recordings", request)
+
+    @app.get("/recordings/{recording_id}")
+    async def get_recording_proxy(recording_id: str, request: Request) -> Response:
+        return await _forward_json("GET", f"/recordings/{recording_id}", request)
+
+    @app.patch("/recordings/{recording_id}")
+    async def patch_recording_proxy(recording_id: str, request: Request) -> Response:
+        return await _forward_json("PATCH", f"/recordings/{recording_id}", request)
+
+    @app.post("/recordings/{recording_id}/reparse")
+    async def reparse_recording_proxy(recording_id: str, request: Request) -> Response:
+        return await _forward_json("POST", f"/recordings/{recording_id}/reparse", request)
+
+    @app.get("/system/status")
+    async def system_status_proxy(request: Request) -> Response:
+        return await _forward_json("GET", "/system/status", request)
+
+    @app.get("/locations")
+    async def list_locations_proxy(request: Request) -> Response:
+        return await _forward_json("GET", "/locations", request)
+
+    @app.post("/locations")
+    async def add_location_proxy(request: Request) -> Response:
+        return await _forward_json("POST", "/locations", request)
+
+    @app.post("/recordings")
+    async def create_recording_proxy(request: Request) -> Response:
+        """Streams the multipart body straight through to evil without parsing
+        or buffering it (recordings can be GBs). If the browser disconnects
+        mid-upload the stream breaks, httpx aborts the upstream request, and
+        evil discards its staging folder -- nothing is stored."""
+        headers = {"content-type": request.headers.get("content-type", "")}
+        if "content-length" in request.headers:
+            headers["content-length"] = request.headers["content-length"]
+        timeout = httpx.Timeout(RECORDING_PROXY_TIMEOUT_SEC, connect=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                upstream = await client.post(
+                    f"{app.state.upload_url}/recordings", content=request.stream(), headers=headers
+                )
+            except ClientDisconnect:
+                # Browser went away mid-upload: evil sees the broken stream and stores nothing.
+                return Response(status_code=499)
+            except httpx.TransportError as exc:
+                raise HTTPException(status_code=502, detail="evil upload service unreachable") from exc
+        return Response(
+            content=upstream.content,
+            status_code=upstream.status_code,
+            media_type=upstream.headers.get("content-type", "application/json"),
+        )
 
     return app
 

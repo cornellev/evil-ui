@@ -166,6 +166,19 @@ export function itemsFromFileList(files: FileList | File[]): UploadItem[] {
   }));
 }
 
+/** Splits a selection into recordings. Loose CSV files are each their own recording (the parser reads
+ * only one CSV per recording, so a second would be stored but never parsed). Anything else, such as a
+ * rosbag2 folder or a multi-part .db3 set, stays together as one recording. */
+export function groupUploads(items: UploadItem[]): UploadItem[][] {
+  const isCsv = (i: UploadItem) => i.path.toLowerCase().endsWith(".csv");
+  const csvs = items.filter(isCsv);
+  const rest = items.filter((i) => !isCsv(i));
+  if (csvs.length <= 1) return [items];
+  const groups = csvs.map((c) => [c]);
+  if (rest.length > 0) groups.push(rest);
+  return groups;
+}
+
 /** Uploads one recording (one or more files) and resolves only when evil has
  * stored and cataloged it. XMLHttpRequest rather than fetch for upload
  * progress. Aborting (or closing the tab) stores nothing. */

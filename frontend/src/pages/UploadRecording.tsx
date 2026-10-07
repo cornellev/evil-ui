@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 import {
   CATEGORIES,
+  groupUploads,
   itemsFromFileList,
   uploadRecordings,
   type RecordingUploadResult,
@@ -40,6 +41,7 @@ export default function UploadRecording() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RecordingUploadResult | null>(null);
+  const [results, setResults] = useState<RecordingUploadResult[]>([]);
   const abortRef = useRef<(() => void) | null>(null);
 
   const totalBytes = items.reduce((sum, i) => sum + i.file.size, 0);
@@ -48,6 +50,7 @@ export default function UploadRecording() {
     if (!files || files.length === 0) return;
     setItems(itemsFromFileList(files));
     setResult(null);
+    setResults([]);
     setError(null);
   }
 
@@ -56,18 +59,31 @@ export default function UploadRecording() {
     setPending(true);
     setError(null);
     setResult(null);
+    setResults([]);
     setProgress({ loaded: 0, total: totalBytes });
-    const { promise, abort } = uploadRecordings(
-      items,
-      { category: category as never, car, event, label, notes },
-      (loaded, total) => setProgress({ loaded, total }),
-    );
-    abortRef.current = abort;
+    const groups = groupUploads(items);
+    const stored: RecordingUploadResult[] = [];
+    let done = 0;
     try {
-      setResult(await promise);
+      for (const group of groups) {
+        const groupBytes = group.reduce((sum, i) => sum + i.file.size, 0);
+        // several CSVs become several recordings: keep a typed label unique by appending the file name
+        const groupLabel = groups.length > 1 && label ? `${label} (${group[0].path})` : label;
+        const { promise, abort } = uploadRecordings(
+          group,
+          { category: category as never, car, event, label: groupLabel, notes },
+          (loaded) => setProgress({ loaded: done + Math.min(loaded, groupBytes), total: totalBytes }),
+        );
+        abortRef.current = abort;
+        stored.push(await promise);
+        done += groupBytes;
+      }
+      setResults(stored);
+      setResult(stored[stored.length - 1]);
       setItems([]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const note = stored.length > 0 ? ` (${stored.length} of ${groups.length} recordings were stored before this)` : "";
+      setError((err instanceof Error ? err.message : String(err)) + note);
     } finally {
       abortRef.current = null;
       setPending(false);
@@ -114,6 +130,12 @@ export default function UploadRecording() {
               <Typography variant="body2">
                 {items.length} file{items.length === 1 ? "" : "s"}, {formatBytes(totalBytes)}
               </Typography>
+              {groupUploads(items).length > 1 && (
+                <Alert severity="info">
+                  This will be stored as {groupUploads(items).length} separate recordings (one per CSV), each
+                  parsed into its own run.
+                </Alert>
+              )}
               <List dense disablePadding sx={{ maxHeight: 140, overflow: "auto" }}>
                 {items.slice(0, 50).map((i) => (
                   <ListItem key={i.path} disableGutters sx={{ py: 0 }}>
@@ -188,7 +210,9 @@ export default function UploadRecording() {
                 </Button>
               }
             >
-              {result.deduplicated
+              {results.length > 1
+                ? `Stored ${results.filter((r) => !r.deduplicated).length} new recordings; ${results.filter((r) => r.deduplicated).length} already stored.`
+                : result.deduplicated
                 ? `Already stored (recording ${result.recording_id}); nothing new was added.`
                 : `Stored ${result.files} file${result.files === 1 ? "" : "s"} (${formatBytes(result.total_bytes)}) as recording ${result.recording_id}. Status: ${result.parse_status}.`}
             </Alert>

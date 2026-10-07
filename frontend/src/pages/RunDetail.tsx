@@ -19,8 +19,11 @@ import { listTurns, listLaps, listStraights, type Turn, type Lap, type Straight 
 
 type TabKey = "turns" | "laps" | "straights";
 
+const fmt1 = (value: number | null | undefined) =>
+  value === null || value === undefined ? "-" : value.toFixed(1);
+
 function fmt(value: number | null): string {
-  return value === null ? "-" : value.toFixed(2);
+  return value === null || value === undefined ? "-" : value.toFixed(2);
 }
 
 export default function RunDetail() {
@@ -77,16 +80,24 @@ export default function RunDetail() {
                   <TableCell align="right">End</TableCell>
                   <TableCell align="right">Entry speed</TableCell>
                   <TableCell align="right">Exit speed</TableCell>
+                  <TableCell align="right">Duration (s)</TableCell>
+                  <TableCell align="right">Distance (m)</TableCell>
+                  <TableCell align="right">Energy (Wh)</TableCell>
+                  <TableCell align="right">Efficiency (mi/kWh)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {turns.map((t) => (
                   <TableRow key={t.turn_id}>
-                    <TableCell>{t.turn_name}</TableCell>
+                    <TableCell>{t.name ?? t.turn_name}</TableCell>
                     <TableCell align="right">{t.start_ts.toFixed(1)}s</TableCell>
                     <TableCell align="right">{t.end_ts.toFixed(1)}s</TableCell>
                     <TableCell align="right">{fmt(t.entry_speed)}</TableCell>
                     <TableCell align="right">{fmt(t.exit_speed)}</TableCell>
+                    <TableCell align="right">{fmt1(t.duration_s)}</TableCell>
+                    <TableCell align="right">{fmt1(t.distance_m)}</TableCell>
+                    <TableCell align="right">{fmt(t.energy_wh)}</TableCell>
+                    <TableCell align="right">{fmt1(t.efficiency_mi_per_kwh)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -110,7 +121,10 @@ export default function RunDetail() {
                   <TableCell align="right">End</TableCell>
                   <TableCell align="right">Turns</TableCell>
                   <TableCell align="right">Avg speed</TableCell>
+                  <TableCell align="right">Duration (s)</TableCell>
+                  <TableCell align="right">Distance (m)</TableCell>
                   <TableCell align="right">Energy (Wh)</TableCell>
+                  <TableCell align="right">Efficiency (mi/kWh)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -121,7 +135,10 @@ export default function RunDetail() {
                     <TableCell align="right">{l.end_ts.toFixed(1)}s</TableCell>
                     <TableCell align="right">{l.turn_count}</TableCell>
                     <TableCell align="right">{fmt(l.avg_speed)}</TableCell>
+                    <TableCell align="right">{fmt1(l.duration_s)}</TableCell>
+                    <TableCell align="right">{fmt1(l.distance_m)}</TableCell>
                     <TableCell align="right">{fmt(l.energy_wh)}</TableCell>
+                    <TableCell align="right">{fmt1(l.efficiency_mi_per_kwh)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -140,21 +157,31 @@ export default function RunDetail() {
             <Table size="small">
               <TableHead>
                 <TableRow>
+                  <TableCell>Straight</TableCell>
                   <TableCell align="right">Start</TableCell>
                   <TableCell align="right">End</TableCell>
                   <TableCell align="right">Entry speed</TableCell>
                   <TableCell align="right">Exit speed</TableCell>
                   <TableCell align="right">Avg speed</TableCell>
+                  <TableCell align="right">Duration (s)</TableCell>
+                  <TableCell align="right">Distance (m)</TableCell>
+                  <TableCell align="right">Energy (Wh)</TableCell>
+                  <TableCell align="right">Efficiency (mi/kWh)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {straights.map((s) => (
                   <TableRow key={s.straight_id}>
+                    <TableCell>{s.name}</TableCell>
                     <TableCell align="right">{s.start_ts.toFixed(1)}s</TableCell>
                     <TableCell align="right">{s.end_ts.toFixed(1)}s</TableCell>
                     <TableCell align="right">{fmt(s.entry_speed)}</TableCell>
                     <TableCell align="right">{fmt(s.exit_speed)}</TableCell>
                     <TableCell align="right">{fmt(s.avg_speed)}</TableCell>
+                    <TableCell align="right">{fmt1(s.duration_s)}</TableCell>
+                    <TableCell align="right">{fmt1(s.distance_m)}</TableCell>
+                    <TableCell align="right">{fmt(s.energy_wh)}</TableCell>
+                    <TableCell align="right">{fmt1(s.efficiency_mi_per_kwh)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -14,7 +14,12 @@ import json
 from typing import Any
 
 from mcp import ClientSession
+from mcp.types import Implementation
 from mcp.client.streamable_http import streamable_http_client
+
+
+# How EVIL's traces tell the UI's (many, routine) browsing calls apart from agents' calls.
+CLIENT_INFO = Implementation(name="evil-ui", version="1")
 
 
 class MCPToolClient:
@@ -39,7 +44,7 @@ class MCPToolClient:
         from every block instead of returning just the first (a real gap the
         structured_content preference alone didn't close)."""
         async with streamable_http_client(self.url) as (read, write):
-            async with ClientSession(read, write) as session:
+            async with ClientSession(read, write, client_info=CLIENT_INFO) as session:
                 await session.initialize()
                 result = await session.call_tool(name, arguments)
                 is_error = result.is_error

@@ -70,16 +70,22 @@ repos and evil's own e2e check strengthened to match.
 ```bash
 EVIL_MCP_URL=http://<evil-host>:8765/mcp EVIL_UPLOAD_URL=http://<evil-host>:8766 \
 TERN_LLM_URL=http://<tern-llm-host>:8000 \
-VITE_API_BASE_URL=http://<this-host>:8080 \
     docker compose up --build
 ```
 
 Then open `http://<this-host>:8081`.
 
-`VITE_API_BASE_URL` is a **build-time** value (Vite bakes `import.meta.env.VITE_*`
-into the static bundle at `vite build`, it isn't read at container start) --
-changing it means `docker compose build frontend` again, not just
-restarting the container.
+The browser talks only to the frontend: the page calls `/api/*` on its own origin and
+`frontend/server.ts` proxies that to the backend (streaming request bodies, so multi-GB
+uploads pass through; idle timeout raised to Bun's 255 s maximum for slow Tern answers and
+upload replies). One origin is what lets the UI be served over HTTPS (Tailscale Serve)
+without the browser blocking plain-HTTP API calls as mixed content.
+
+`VITE_API_BASE_URL` (default `/api`) is a **build-time** value (Vite bakes
+`import.meta.env.VITE_*` into the static bundle at `vite build`, it isn't read at container
+start). Leave it unset unless the bundle must call a backend directly; changing it means
+`docker compose build frontend` again. `tests/test_frontend_server.py` covers the production
+server and proxy end to end.
 
 Docker itself works in this environment (confirmed: `docker --version`,
 `docker ps`); `docker compose` (the plugin) was not yet installed when this

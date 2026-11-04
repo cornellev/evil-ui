@@ -8,6 +8,32 @@ export interface RunSummary {
   distance_m: number | null;
   energy_wh: number | null;
   efficiency_mi_per_kwh: number | null;
+  lap_count?: number;
+  /** 'upload' = a parsed recording (complete); 'live' = received over the live feed (approximate). */
+  tier?: "upload" | "live";
+  /** 'recording' while the car's bag is recording this run right now. */
+  status?: "recording" | "closed";
+  /** The other tier's run of the same drive (live capture <-> full upload). */
+  linked_run_id?: string | null;
+  end_reason?: string | null;
+}
+
+/** EVIL get_live_status: the car's feed and the run being recorded right now. */
+export interface LiveStatus {
+  recording: boolean;
+  feed_alive: boolean;
+  run_id?: string;
+  last_message_age_s?: number | null;
+  msgs_per_s?: number | null;
+  session_mode?: "bag" | "gap" | null;
+  compiler?: string;
+  live_tier?: string;
+  latest?: { speed?: number | null; voltage?: number | null; current?: number | null; power_w?: number | null } | null;
+  laps_completed?: number;
+  current_lap?: { lap_number: number; elapsed_s: number | null };
+  current_segment?: string | null;
+  so_far?: { distance_m: number | null; energy_wh: number | null; efficiency_mi_per_kwh: number | null };
+  counters?: { stored?: number; duplicate?: number; rejected?: number; estimated_lost?: number | null; overflow?: number };
 }
 
 export interface Turn {
@@ -76,8 +102,12 @@ async function getJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function listRuns(): Promise<RunSummary[]> {
-  return getJson<RunSummary[]>("/runs");
+export function listRuns(includeLiveTwins = false): Promise<RunSummary[]> {
+  return getJson<RunSummary[]>(includeLiveTwins ? "/runs?include_live_twins=true" : "/runs");
+}
+
+export function getLiveStatus(): Promise<LiveStatus> {
+  return getJson<LiveStatus>("/live/status");
 }
 
 export function listTurns(runId: string, limit = 50, offset = 0): Promise<TurnsPage> {
@@ -137,6 +167,9 @@ export interface RecordingSummary {
   total_bytes: number | null;
   parse_status: "pending" | "running" | "parsed" | "skipped" | "failed";
   parse_error: string | null;
+  /** 'upload' (a file someone uploaded) or 'live_capture' (what the live feed received for one live run). */
+  kind?: "upload" | "live_capture";
+  linked_recording_id?: string | null;
 }
 
 export interface RecordingUploadResult {
@@ -319,9 +352,12 @@ export async function updateRecording(recordingId: string, changes: RecordingEdi
   return response.json() as Promise<RecordingSummary>;
 }
 
-export async function listRecordings(params: { category?: string; limit?: number } = {}): Promise<RecordingSummary[]> {
+export async function listRecordings(
+  params: { category?: string; limit?: number; kind?: "upload" | "live_capture" } = {},
+): Promise<RecordingSummary[]> {
   const query = new URLSearchParams();
   if (params.category) query.set("category", params.category);
+  if (params.kind) query.set("kind", params.kind);
   if (params.limit) query.set("limit", String(params.limit));
   const response = await fetch(`${API_BASE_URL}/recordings?${query}`);
   if (!response.ok) {

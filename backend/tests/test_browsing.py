@@ -47,3 +47,16 @@ def test_evil_unreachable_returns_502_not_a_crash(fake_tern_llm_url):
     resp = TestClient(app).get("/runs")
 
     assert resp.status_code == 502
+
+
+def test_get_runs_can_include_live_twins(dummy_mcp_url, fake_tern_llm_url):
+    resp = _client(dummy_mcp_url, fake_tern_llm_url).get("/runs?include_live_twins=true")
+    assert resp.status_code == 200
+    assert [r["run_id"] for r in resp.json()] == ["run-1", "live-uc26-20260409-190000"]
+
+
+def test_live_status_proxies_get_live_status(dummy_mcp_url, fake_tern_llm_url):
+    resp = _client(dummy_mcp_url, fake_tern_llm_url).get("/live/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["recording"] is True and body["current_lap"]["lap_number"] == 3

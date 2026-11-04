@@ -123,3 +123,38 @@ def test_a_recording_can_be_edited_from_the_recordings_page(running_frontend_url
             assert errors == [], f"console/page errors while editing: {errors}"
         finally:
             browser.close()
+
+
+def test_live_status_and_live_captures_render(running_frontend_url: str) -> None:
+    """The live tier (live-next-steps-2026-11.md section D): the recording banner on the runs page,
+    the live twin behind the toggle, and the live-feed row in the status panel."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, **chromium_launch_kwargs())
+        try:
+            page = browser.new_page()
+            errors: list[str] = []
+            page.on("pageerror", lambda exc: errors.append(str(exc)))
+            page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
+
+            page.goto(running_frontend_url)
+            live = page.get_by_test_id("live-status")
+            live.get_by_test_id("live-recording").wait_for(timeout=10_000)
+            expect(live.get_by_test_id("live-numbers")).to_contain_text("lap 3", timeout=10_000)
+            expect(live.get_by_test_id("live-numbers")).to_contain_text("Turn 3")
+            expect(live).to_contain_text("feed live, 50 msg/s")
+
+            table = page.locator("table")
+            table.get_by_text("run-1", exact=True).wait_for(timeout=10_000)
+            expect(table.get_by_test_id("run-live")).to_have_count(0)            # twin hidden by default
+            page.get_by_label("Also show live captures that have a full upload").check()
+            table.get_by_text("live-uc26-20260409-190000", exact=True).wait_for(timeout=10_000)
+            expect(table.get_by_test_id("run-live")).to_have_count(1)
+
+            page.goto(f"{running_frontend_url}/upload")
+            panel = page.get_by_test_id("status-panel")
+            panel.get_by_text("Live feed").wait_for(timeout=10_000)
+            panel.get_by_test_id("live-recording").wait_for(timeout=10_000)
+
+            assert errors == [], f"console/page errors: {errors}"
+        finally:
+            browser.close()

@@ -15,6 +15,8 @@ import {
   Typography,
 } from "@mui/material";
 import { getSystemStatus, type JobRow, type SystemStatus } from "../api";
+import LiveStatusCard from "./LiveStatusCard";
+import { useLiveStatus } from "../hooks/useLiveStatus";
 
 const POLL_MS = 3000;
 
@@ -35,6 +37,7 @@ const STATUS_COLOR: Record<JobRow["status"], "default" | "info" | "success" | "e
 /** Job queue plus NUC CPU / memory / disk, polled every few seconds. Meant for
  * a software-literate team debugging uploads: failed jobs show their error. */
 export default function StatusPanel() {
+  const live = useLiveStatus(3000);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,6 +134,26 @@ export default function StatusPanel() {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Typography variant="subtitle1" sx={{ mt: 2 }} gutterBottom>
+        Live feed
+      </Typography>
+      {live ? (
+        <>
+          <LiveStatusCard status={live} compact />
+          {live.counters && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: -1, mb: 1 }}>
+              stored {live.counters.stored ?? 0} · repeats dropped {live.counters.duplicate ?? 0} · rejected{" "}
+              {live.counters.rejected ?? 0} · est. lost {live.counters.estimated_lost ?? 0} · overflow{" "}
+              {live.counters.overflow ?? 0}
+            </Typography>
+          )}
+        </>
+      ) : (
+        <Typography variant="body2" color="text.secondary">
+          Live status unavailable.
+        </Typography>
+      )}
 
       <Typography variant="subtitle1" sx={{ mt: 2 }} gutterBottom>
         NUC

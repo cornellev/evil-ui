@@ -16,6 +16,8 @@ import {
   Alert,
 } from "@mui/material";
 import { listTurns, listLaps, listStraights, type Turn, type Lap, type Straight } from "../api";
+import LiveStatusCard from "../components/LiveStatusCard";
+import { useLiveStatus } from "../hooks/useLiveStatus";
 
 type TabKey = "turns" | "laps" | "straights";
 
@@ -26,8 +28,12 @@ function fmt(value: number | null): string {
   return value === null || value === undefined ? "-" : value.toFixed(2);
 }
 
+const REFRESH_WHILE_RECORDING_MS = 5000;
+
 export default function RunDetail() {
   const { runId = "" } = useParams<{ runId: string }>();
+  const live = useLiveStatus();
+  const isRecording = Boolean(live?.recording && live.run_id === runId);
   const [tab, setTab] = useState<TabKey>("turns");
   const [turns, setTurns] = useState<Turn[] | null>(null);
   const [laps, setLaps] = useState<Lap[] | null>(null);
@@ -51,11 +57,24 @@ export default function RunDetail() {
     }
   }, [tab, runId, turns, laps, straights]);
 
+  // While this run is being recorded, its turns/laps/straights keep growing: reload the open tab.
+  useEffect(() => {
+    if (!isRecording) return;
+    const timer = setInterval(() => {
+      // reload in place (no spinner flash); errors keep the last good table
+      if (tab === "turns") listTurns(runId).then((p) => setTurns(p.turns)).catch(() => undefined);
+      else if (tab === "laps") listLaps(runId).then((p) => setLaps(p.laps)).catch(() => undefined);
+      else listStraights(runId).then((p) => setStraights(p.straights)).catch(() => undefined);
+    }, REFRESH_WHILE_RECORDING_MS);
+    return () => clearInterval(timer);
+  }, [isRecording, tab, runId]);
+
   return (
     <>
       <Typography variant="h5" gutterBottom>
         Run: {runId}
       </Typography>
+      {isRecording && <LiveStatusCard status={live} />}
 
       <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
         <Tab label="Turns" value="turns" />

@@ -69,8 +69,15 @@ def create_app(
         return {"status": "ok"}
 
     @app.get("/runs")
-    async def get_runs() -> object:
-        return await _call_tool("list_runs", {})
+    async def get_runs(include_live_twins: bool = False) -> object:
+        """Both tiers: uploads and live runs (tier, status 'recording' | 'closed', linked_run_id)."""
+        args = {"include_live_twins": True} if include_live_twins else {}
+        return await _call_tool("list_runs", args)
+
+    @app.get("/live/status")
+    async def get_live_status() -> object:
+        """Is the car's live feed alive, is a run recording, its latest numbers (EVIL get_live_status)."""
+        return await _call_tool("get_live_status", {})
 
     @app.get("/runs/{run_id}/turns")
     async def get_turns(run_id: str, limit: int = 50, offset: int = 0) -> object:
@@ -90,7 +97,9 @@ def create_app(
         timeout = httpx.Timeout(ASK_PROXY_TIMEOUT_SEC, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             try:
-                response = await client.post(url, json={"question": payload.question})
+                # client steers Tern's default run (agent._build_run_context): evil-ui means the
+                # latest completed run unless the question is about "now".
+                response = await client.post(url, json={"question": payload.question, "client": "evil-ui"})
             except httpx.TransportError as exc:
                 raise HTTPException(status_code=502, detail="tern-llm unreachable") from exc
 

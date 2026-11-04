@@ -13,6 +13,8 @@ import {
   Chip,
   Button,
   Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import { listLocations, listRecordings, reparseRecording, type NamedLocation, type RecordingSummary } from "../api";
@@ -38,6 +40,8 @@ export default function RecordingsList() {
   const [error, setError] = useState<string | null>(null);
   const [locations, setLocations] = useState<NamedLocation[]>([]);
   const [editing, setEditing] = useState<RecordingSummary | null>(null);
+  const [kind, setKind] = useState<"all" | "upload" | "live_capture">("all");
+  const query = { limit: 200, kind: kind === "all" ? undefined : kind };
 
   useEffect(() => {
     listLocations().then(setLocations).catch(() => setLocations([]));
@@ -46,7 +50,7 @@ export default function RecordingsList() {
   useEffect(() => {
     let cancelled = false;
     const load = () =>
-      listRecordings({ limit: 200 })
+      listRecordings({ limit: 200, kind: kind === "all" ? undefined : kind })
         .then((rows) => !cancelled && setRecordings(rows))
         .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)));
     load();
@@ -55,12 +59,12 @@ export default function RecordingsList() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [kind]);
 
   async function handleReparse(id: string) {
     try {
       await reparseRecording(id);
-      setRecordings(await listRecordings({ limit: 200 }));
+      setRecordings(await listRecordings(query));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -74,6 +78,18 @@ export default function RecordingsList() {
       <Typography variant="h5" gutterBottom>
         Recordings
       </Typography>
+      <ToggleButtonGroup
+        size="small"
+        exclusive
+        value={kind}
+        onChange={(_, v) => v && setKind(v)}
+        sx={{ mb: 1 }}
+        data-testid="recordings-kind"
+      >
+        <ToggleButton value="all">All</ToggleButton>
+        <ToggleButton value="upload">Uploads</ToggleButton>
+        <ToggleButton value="live_capture">Live captures</ToggleButton>
+      </ToggleButtonGroup>
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">
           <TableHead>
@@ -95,7 +111,27 @@ export default function RecordingsList() {
             {recordings.map((r) => (
               <TableRow key={r.recording_id}>
                 <TableCell>{new Date(r.uploaded_at * 1000).toLocaleString()}</TableCell>
-                <TableCell>{r.label ?? r.original_name ?? r.recording_id}</TableCell>
+                <TableCell>
+                  {r.label ?? r.original_name ?? r.recording_id}
+                  {r.kind === "live_capture" && (
+                    <Tooltip
+                      title={
+                        r.linked_recording_id
+                          ? "What the live feed received; the full onboard recording is uploaded too"
+                          : "What the live feed received. Only copy so far: upload the onboard bag for the complete run"
+                      }
+                    >
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color={r.linked_recording_id ? "default" : "warning"}
+                        label={r.linked_recording_id ? "Live" : "Live · only copy"}
+                        sx={{ ml: 0.5 }}
+                        data-testid="recording-live"
+                      />
+                    </Tooltip>
+                  )}
+                </TableCell>
                 <TableCell>
                   {r.category ?? ""}
                   {r.category && r.category_method === "auto" && (

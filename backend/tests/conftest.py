@@ -50,9 +50,23 @@ def dummy_mcp_url() -> Iterator[str]:
     server = MCPServer("dummy-evil")
 
     @server.tool(name="list_runs")
-    async def list_runs() -> list[dict]:
-        return [{"run_id": "run-1", "sample_count": 10, "start_ts": 0.0, "end_ts": 10.0,
+    async def list_runs(include_live_twins: bool = False) -> list[dict]:
+        runs = [{"run_id": "run-1", "sample_count": 10, "start_ts": 0.0, "end_ts": 10.0,
                  "distance_m": 14346.0, "energy_wh": 300.3, "efficiency_mi_per_kwh": 29.7}]
+        if include_live_twins:
+            runs.append({"run_id": "live-uc26-20260409-190000", "sample_count": 8, "start_ts": 0.0, "end_ts": 8.0,
+                         "distance_m": 11000.0, "energy_wh": 240.0, "efficiency_mi_per_kwh": 28.4,
+                         "tier": "live", "status": "closed", "lap_count": 1, "linked_run_id": "run-1"})
+        return runs
+
+    @server.tool(name="get_live_status")
+    async def get_live_status() -> dict:
+        return {"recording": True, "feed_alive": True, "run_id": "live-uc26-20261104-140000",
+                "last_message_age_s": 0.1, "msgs_per_s": 50.0, "session_mode": "bag",
+                "latest": {"speed": 8.2, "voltage": 50.1, "current": 7.9, "power_w": 395.8},
+                "laps_completed": 2, "current_lap": {"lap_number": 3, "elapsed_s": 41.5},
+                "current_segment": "Turn 3", "so_far": {"distance_m": 7600.0, "energy_wh": 41.2,
+                                                       "efficiency_mi_per_kwh": 114.6}}
 
     @server.tool(name="list_turns")
     async def list_turns(run_id: str, limit: int = 50, offset: int = 0) -> dict:

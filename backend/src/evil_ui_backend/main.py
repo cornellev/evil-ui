@@ -71,7 +71,8 @@ def create_app(
     @app.get("/runs")
     async def get_runs(include_live_twins: bool = False) -> object:
         """Both tiers: uploads and live runs (tier, status 'recording' | 'closed', linked_run_id)."""
-        args = {"include_live_twins": True} if include_live_twins else {}
+        # The Runs page lists everything: EVIL's list_runs returns 20 by default (sized for Tern).
+        args = {"limit": 500, **({"include_live_twins": True} if include_live_twins else {})}
         return await _call_tool("list_runs", args)
 
     @app.get("/live/status")

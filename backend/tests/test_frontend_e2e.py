@@ -158,3 +158,37 @@ def test_live_status_and_live_captures_render(running_frontend_url: str) -> None
             assert errors == [], f"console/page errors: {errors}"
         finally:
             browser.close()
+
+
+def test_ask_tern_shows_live_steps_then_the_answer(running_frontend_url: str) -> None:
+    """A suggestion chip asks; while Tern works the panel shows "Thinking" with a spinner and
+    each tool step as it happens; then the answer, with the steps folded into "N steps"."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, **chromium_launch_kwargs())
+        try:
+            page = browser.new_page()
+            errors: list[str] = []
+            page.on("pageerror", lambda exc: errors.append(str(exc)))
+            page.goto(running_frontend_url)
+
+            page.get_by_test_id("chat-suggestion").first.click()
+            page.get_by_test_id("chat-thinking").wait_for(timeout=10_000)
+            step = page.get_by_test_id("chat-step").first
+            step.wait_for(timeout=10_000)
+            expect(step).to_contain_text("Reading lap times")             # list_laps, in words
+            answer = page.get_by_test_id("chat-answer").first
+            expect(answer).to_have_text("echo: Lap times for the latest run", timeout=10_000)
+            expect(page.get_by_test_id("chat-thinking")).to_have_count(0)
+            toggle = page.get_by_test_id("chat-steps-toggle")
+            expect(toggle).to_contain_text("1 step")
+            expect(page.get_by_test_id("chat-step")).to_have_count(0)      # folded once answered
+            toggle.click()
+            expect(page.get_by_test_id("chat-step").first).to_contain_text("3 rows")
+
+            page.get_by_test_id("chat-input").fill("and the energy?")
+            page.get_by_test_id("chat-input").press("Enter")
+            expect(page.get_by_test_id("chat-answer").nth(1)).to_have_text("echo: and the energy?", timeout=10_000)
+
+            assert errors == [], f"console/page errors: {errors}"
+        finally:
+            browser.close()

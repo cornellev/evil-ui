@@ -365,16 +365,3 @@ export async function listRecordings(
   }
   return response.json() as Promise<RecordingSummary[]>;
 }
-
-export async function askQuestion(question: string): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/ask`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
-  });
-  if (!response.ok) {
-    throw new Error(`ask failed: ${response.status} ${await response.text()}`);
-  }
-  const data = (await response.json()) as { answer: string };
-  return data.answer;
-}

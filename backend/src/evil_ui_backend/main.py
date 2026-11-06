@@ -14,11 +14,13 @@ tern-llm's api.py wraps its own ask() call in asyncio.to_thread().
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from starlette.requests import ClientDisconnect
 
@@ -107,6 +109,50 @@ def create_app(
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.json()
+
+    @app.post("/ask/stream")
+    async def ask_stream_proxy(payload: AskRequest) -> StreamingResponse:
+        """Tern's progress (queued, thinking, tool calls) and then the answer, one JSON object per
+        line, passed through as they come. Every failure is a final {"type": "error"} line, so the
+        chat never has to parse an HTTP error. A Tern without /ask/stream gets one plain /ask."""
+        base = app.state.tern_llm_url
+        body = {"question": payload.question, "client": "evil-ui"}
+
+        async def events():
+            timeout = httpx.Timeout(ASK_PROXY_TIMEOUT_SEC, connect=5.0)
+            fallback = False
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream("POST", f"{base}/ask/stream", json=body) as response:
+                        if response.status_code in (404, 405):
+                            fallback = True
+                        elif response.status_code != 200:
+                            await response.aread()
+                            yield _line(_error_event(response.status_code, response.text))
+                            return
+                        else:
+                            async for line in response.aiter_lines():
+                                if line.strip():
+                                    yield line.strip() + "\n"
+                            return
+                    if fallback:
+                        yield _line({"type": "thinking", "turn": 1})
+                        response = await client.post(f"{base}/ask", json=body)
+                        if response.status_code != 200:
+                            yield _line(_error_event(response.status_code, response.text))
+                        else:
+                            data = response.json()
+                            yield _line({"type": "answer", "text": data.get("answer", ""),
+                                         "outcome": data.get("outcome"), "trace_id": data.get("trace_id")})
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                yield _line({"type": "error", "status": 502, "detail": "tern-llm unreachable"})
+            except httpx.TimeoutException:
+                yield _line({"type": "error", "status": 504, "detail": "tern-llm did not respond in time"})
+            except httpx.TransportError:
+                yield _line({"type": "error", "status": 502, "detail": "tern-llm unreachable"})
+
+        return StreamingResponse(events(), media_type="application/x-ndjson",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.post("/upload")
     async def upload_proxy(run_id: str = Form(...), file: UploadFile = File(...)) -> object:
@@ -204,3 +250,20 @@ def create_app(
 
 
 app = create_app()
+
+
+def _line(event: dict) -> str:
+    return json.dumps(event) + "\n"
+
+
+def _error_event(status: int, body: str) -> dict:
+    if status in (409, 429, 503):
+        detail = "Tern is busy answering other questions, try again shortly"
+    elif status == 504:
+        detail = "tern-llm did not respond in time"
+    else:
+        try:
+            detail = str(json.loads(body).get("detail") or f"tern-llm returned HTTP {status}")
+        except (ValueError, AttributeError):
+            detail = f"tern-llm returned HTTP {status}"
+    return {"type": "error", "status": status, "detail": detail}

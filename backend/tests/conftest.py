@@ -162,6 +162,24 @@ def fake_tern_llm_url() -> Iterator[str]:
     async def ask(payload: dict) -> dict:
         return {"answer": f"echo: {payload['question']}"}
 
+    @app.post("/ask/stream")
+    async def ask_stream(payload: dict):
+        import asyncio
+        import json as _json
+
+        from fastapi.responses import StreamingResponse
+
+        async def events():
+            for e in ({"type": "started", "queue_wait_ms": 0}, {"type": "thinking", "turn": 1},
+                      {"type": "tool", "name": "list_laps", "args": {"run_id": "run-x"}},
+                      {"type": "tool_done", "name": "list_laps", "ok": True, "summary": "3 rows"},
+                      {"type": "thinking", "turn": 2},
+                      {"type": "answer", "text": f"echo: {payload['question']}", "outcome": "answered"}):
+                yield _json.dumps(e) + "\n"
+                await asyncio.sleep(0.3)          # slow enough for a browser to see the steps live
+
+        return StreamingResponse(events(), media_type="application/x-ndjson")
+
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
